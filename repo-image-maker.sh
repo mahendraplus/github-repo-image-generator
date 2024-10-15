@@ -4,40 +4,44 @@
 # This tool automatically generates beautiful social media images for your GitHub repositories.
 # Created by: github.com/mahendraplus - Mahendra Mali
 
-# Function to display help message
-function display_help() {
-    echo "Usage: $0 -u <github_username>"
-    echo ""
-    echo "Options:"
-    echo "  -u    Specify the GitHub username to fetch repositories."
-    echo "  -h    Display this help message."
-    exit 1
+# Define text colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Function to display the title and description
+display_info() {
+    echo -e "${YELLOW}============================${NC}"
+    echo -e "${GREEN}  GitHub Social Image Generator  ${NC}"
+    echo -e "${YELLOW}============================${NC}"
+    echo -e "This tool automatically generates beautiful social media images for your GitHub repositories."
+    echo -e "Created by: ${CYAN}github.com/mahendraplus - Mahendra Mali${NC}"
+    echo -e "${YELLOW}============================${NC}"
 }
 
 # Parse command-line arguments
-while getopts ":u:h" opt; do
-  case $opt in
-    u)
-      USERNAME=$OPTARG
-      ;;
-    h)
-      display_help
-      ;;
-    \?)
-      echo "Invalid option: -$OPTARG" >&2
-      display_help
-      ;;
-    :)
-      echo "Option -$OPTARG requires an argument." >&2
-      display_help
-      ;;
-  esac
+while getopts ":u:r:" opt; do
+    case $opt in
+        u) USERNAME="$OPTARG" ;;
+        r) REPO_NAME="$OPTARG" ;;
+        \?) echo -e "${RED}Invalid option: -$OPTARG${NC}" >&2; exit 1 ;;
+    esac
 done
 
-# Check if USERNAME is set
+# Display tool information
+display_info
+
+# Check if username is provided
 if [ -z "$USERNAME" ]; then
-    echo "Error: GitHub username is required."
-    display_help
+    read -p "Please enter your GitHub username: " USERNAME
+fi
+
+# If a repository name is not provided, prompt for one
+if [ -z "$REPO_NAME" ]; then
+    read -p "Please enter a repository name (or leave blank for all): " REPO_NAME
 fi
 
 # Base directory to save images
@@ -46,18 +50,13 @@ DOWNLOAD_DIR="downloads"
 # Create the directory if it doesn't exist
 mkdir -p "$DOWNLOAD_DIR"
 
-# Get all repositories for the specified user
-repo_response=$(curl -s "https://api.github.com/users/$USERNAME/repos?per_page=100")
-
-# Extract the repository names
-repo_names=$(echo "$repo_response" | jq -r '.[].name')
-
-# Loop through each repository
-for REPO_NAME in $repo_names; do
-    echo "Processing repository: $REPO_NAME"
+# Function to download images for a specific repository
+download_images() {
+    local repo_name="$1"
+    echo -e "${BLUE}Processing repository: $repo_name${NC}"
 
     # URL to fetch images from the API for the current repository
-    API_URL="https://lpf64gdwdb.execute-api.us-east-1.amazonaws.com/?repo=https://github.com/$USERNAME/$REPO_NAME"
+    API_URL="https://lpf64gdwdb.execute-api.us-east-1.amazonaws.com/?repo=https://github.com/$USERNAME/$repo_name"
 
     # Fetching image URLs
     response=$(curl -s "$API_URL")
@@ -71,7 +70,7 @@ for REPO_NAME in $repo_names; do
 
     # Prepare image URLs with naming convention
     for img_url in $img_urls; do
-        img_name="${REPO_NAME}_${counter}.png"
+        img_name="${repo_name}_${counter}.png"
         echo "$img_url $DOWNLOAD_DIR/$img_name" >> "$temp_file"
         counter=$((counter + 1))
     done
@@ -81,6 +80,21 @@ for REPO_NAME in $repo_names; do
 
     # Clean up temporary file
     rm -f "$temp_file"
-done
+}
 
-echo "All images have been downloaded to the $DOWNLOAD_DIR directory."
+# If a specific repository is provided, download images for that repository
+if [ -n "$REPO_NAME" ]; then
+    download_images "$REPO_NAME"
+else
+    # Get all repositories for the specified user
+    repo_response=$(curl -s "https://api.github.com/users/$USERNAME/repos?per_page=100")
+    # Extract the repository names
+    repo_names=$(echo "$repo_response" | jq -r '.[].name')
+
+    # Loop through each repository
+    for repo_name in $repo_names; do
+        download_images "$repo_name"
+    done
+fi
+
+echo -e "${GREEN}All images have been downloaded to the $DOWNLOAD_DIR directory.${NC}"
